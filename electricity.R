@@ -15,7 +15,7 @@ raw.data %<>% .[which(seq(1, length(raw.data)) %% 4 != 1), ] %>%
   transform(location=locations) %>%
   gather(date, mega.watt.hours, 2:32) %>%
   spread(megawatthours, mega.watt.hours) %>%
-  setNames(c('location', 'date', 'demand', 'generated', 'net')) %>%
+  rename(generated=`Net generation`, net=`Total net actual interchange`, demand=Demand) %>%
   separate(date, c('month', 'day', 'year'))
 
 raw.data$month %<>% str_replace('X', '')
