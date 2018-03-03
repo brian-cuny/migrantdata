@@ -1,10 +1,12 @@
 library(tidyverse)
 library(magrittr)
 library(zoo)
+library(ggmap)
+library(ggrepel)
 
 # read in data, remove uneeded parts and set column names -----------------
 raw.data <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\UN_MigrantStockByAge_2015.csv', 
-                     stringsAsFactors=FALSE, header=FALSE, na.strings='..') %>%
+                     stringsAsFactors=FALSE, header=FALSE, na.strings='..', encoding='utf-8') %>%
   .[-c(1:15, 17:22), -c(1, 3:4, 6:22, 39, 56)] %>%
   setNames(c('country', 'code', paste('m', .[1, 3:18]), paste('f', .[1, 19:34])) %>% unlist()) %>%
   .[-1, ] %>%
@@ -28,7 +30,7 @@ all.groupings %<>% mutate(major.group = replace(.$country, !.$country %in% major
 # create mapping of major and sub groups ----------------------------------
 raw.data %<>% subset(!.$country %in% major.group) %>% .[-1, ]
 
-country.mapping <- data.frame(rep(NA, nrow(raw.data)), rep(NA, nrow(raw.data)))
+country.mapping <- data.frame(group=rep(NA, nrow(raw.data)), subgroup=rep(NA, nrow(raw.data)))
 for(i in 1:nrow(raw.data)){
   if(raw.data$code[i] == ''){
     all.groupings %<>% .[-1, ]
@@ -41,44 +43,45 @@ for(i in 1:nrow(raw.data)){
 
 # combine data frames, set column names, and reorder content --------------
 answer <- cbind(country.mapping, raw.data) %>%
-  setNames(c('group', 'subgroup', 'country', names(raw.data)[2:length(raw.data)])) %>%
   subset(code != '') %>% 
-  .[, c(3, 1, 2, 5:36)] %>%
-  gather(category, quantity, 4:35) %>%
+  rowid_to_column('id')
+
+country.id.table <- answer[, 1:4]
+
+
+migration.data <- answer[, -c(2:5)] %>%  
+  gather(category, quantity, 2:33) %>%
   separate(category, c('gender', 'age'), ' ') %>%
-  arrange(group, subgroup, country)
+  transform(age = ifelse(age == '5-9', '05-09', age)) %>%
+  spread(gender, quantity)%>%
+  arrange(id)
 
-
-answer$quantity %<>% str_replace_all(., '\\s', '') %>% as.numeric()
+migration.data[, 3:4] %<>% map(~str_replace_all(., '\\s', '') %>% as.numeric())
 # combine data frames, set column names, and reorder content --------------
 
-write.csv(answer, 'C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\answer.csv')
 
 
+# analysis ----------------------------------------------------------------
+populations <- read_csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\population_answer.csv') %>%
+  subset(year == 2010, select=-1) %>%
+  mutate(population = population %>% as.numeric() * 1000000) %>%
+  na.omit()
 
-# top 10 most migrants ----------------------------------------------------
-library(maps)
+country.locations <- read_csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\country_locations.csv')
 
+combined <- inner_join(country.id.table, populations, by='country') %>%
+  inner_join(migration.data, by='id') %>%
+  group_by(country) %>%
+  summarise(total = (sum(f) + sum(m)) / sum(population)) %>%
+  arrange(desc(total)) %>%
+  .[1:10, ] %>%
+  inner_join(country.locations, by=c('country'='name'))
 
-country.rates <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\answer.csv', stringsAsFactors=FALSE)
-country.locations <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\country_locations.csv', stringsAsFactors=FALSE)
-
-
-both <- inner_join(country.rates, country.locations, by=c('country'='name')) %>%
-  mutate(total = rowSums(.[, 6:21])) %>% 
-  subset(select=c(2, 5, 23:25)) %>%
-  .[order(desc(.$total)), ] %>%
-  .[1:10, ]
-
-pch <- ifelse(both$total > 5000000, 19, 2)
-map('world', col='darkgrey', lwd=0.5, mar=c(0.1, 0.1, 0.1, 0.1))
-points(both$longitude, both$latitude, pch=pch)
-
-
-
-
-
-
+ggplot(combined) +
+  borders('world', color='gray50', fill='gray50') + 
+  geom_point(aes(x=longitude, y=latitude, color=country), size=4) +
+  geom_label_repel(aes(x=longitude, y=latitude, label=country)) +
+  scale_color_brewer(palette='Set3')
 
 
 

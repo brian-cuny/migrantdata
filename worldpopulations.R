@@ -30,8 +30,12 @@ ggplot(plotting.data) +
              shape=ifelse(is.na(plotting.data$population), 21, 16),
              size = plotting.data$mod.pop
              ) +
-  geom_label_repel(aes(x=longitude, y=latitude, label=country))
-
+  geom_label_repel(aes(x=longitude, y=latitude, label=country)) +
+  labs(x='Longitude', 
+     y='Latitude',
+     color='Missing Data Count',
+     title='Eastern European Countries are Missing Most Data'
+  )
 
 
 
