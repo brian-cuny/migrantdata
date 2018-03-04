@@ -1,0 +1,183 @@
+---
+output: html_document
+---
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+<link rel="stylesheet" href="./custom.css">
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(knitr)
+library(magrittr)
+library(zoo)
+library(ggmap)
+library(sigmoid)
+library(ggrepel)
+```
+
+<div class='jumbotron'>
+  <h2 class='display-3 text-uppercase'>Project 2 - Data Set 3</h2>
+  <h4 class='right text-uppercase'>By Brian Weinfeld</h4>
+  <div class='clearfix'></div>
+  <h5 class='right text-uppercase'>March 3rd, 2018</h5>
+</div>
+
+<div class='page-header text-uppercase'>
+  <h3>Migration Rates</h3>
+</div>
+
+<div class='well'>
+For my last data set, I'm using UN data on migrant data rates per country in 2010. This is my data set. The data set has numerous changes that need to be made to it. The following issues exist for this data set:
+
+* 14 header rows
+* Column names spllit over 2 rows for heading and sub heading
+* Numbers contain spaces instead of commas
+* Some rows are headings or subheadings in addition to countries. For example, Burundi is in Africa and Eastern Africa.
+* Columns contain data for males, females and male and female combined.
+</div>
+
+
+```{r}
+example <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\UN_MigrantStockByAge_2015.csv', 
+                     stringsAsFactors=FALSE, header=FALSE, na.strings='..', encoding='utf-8')
+kable(example[15:27, 1:6])
+```
+
+<div class='well'>
+I began by reading in the data and removing the unneeded rows and columns. I set the column names using the information stored in row 1 and then removed that row. Finally, I omitted all NA pieces of data. Part of the naming sceme involved adding an 'm' or 'f' to the beginning of the columns for males and females respectively. This will eventually be used to split the data and is used her to differentiate between the two columns.
+</div>
+
+```{r}
+raw.data <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\UN_MigrantStockByAge_2015.csv', 
+                     stringsAsFactors=FALSE, header=FALSE, na.strings='..', encoding='utf-8') %>%
+  .[-c(1:15, 17:22), -c(1, 3:4, 6:22, 39, 56)] %>%
+  setNames(c('country', 'code', paste('m', .[1, 3:18]), paste('f', .[1, 19:34])) %>% unlist()) %>%
+  .[-1, ] %>%
+  na.omit()
+kable(raw.data[1:10, 1:10])
+```
+
+<div class='well'>
+The next step was the remove the header and subheader rows so that they could be applied to each row that contained a country. I grabbed all the rows that had no code in the code column (noticing that only countries had codes) and then seperated them based on whether they were a major grouping or a minor grouping. The major grouping locations had to be selected by hand. I then created a pairing of all major locations and minor locations.
+</div>
+
+```{r}
+all.groupings <- raw.data %>% 
+  subset(code == '', select=c('country')) 
+
+major.group.locs <- c(1, 7, 13, 18, 23)
+major.group <- all.groupings[major.group.locs, ]
+sub.group <- all.groupings[-major.group.locs, ]
+
+all.groupings %<>% mutate(major.group = replace(.$country, !.$country %in% major.group, NA) %>% na.locf(), 
+                          sub.group = replace(.$country, !.$country %in% sub.group, NA)
+                         ) %>%
+  subset(!is.na(sub.group), -1)
+kable(all.groupings %>% head(10))
+```
+
+<div class='well'>
+<p>The all.groupings data contained every combination of major and minor groups and they are in the same order that they need to appear in the final data frame. However, each row appears some unique number of times in the final data set. For example, "Africa - Eastern Africa" represents the first 19 countries while "Africa - Middle Africa" represents the next 9. I decided to create what I called a mapping. This is a list that is the same length as the raw.data but with each row in all.groupings repeated the necessary number of times so that it aligns with the raw data.</p>
+<p>I accommplished this by again searching for empty codes. This would indicate a new subheading and thus a transition of grouping. If there was a code, then the same grouping was repeated.</p>
+</div>
+
+```{r}
+raw.data %<>% subset(!.$country %in% major.group) %>% .[-1, ]
+
+country.mapping <- data.frame(group=rep(NA, nrow(raw.data)), subgroup=rep(NA, nrow(raw.data)))
+for(i in 1:nrow(raw.data)){
+  if(raw.data$code[i] == ''){
+    all.groupings %<>% .[-1, ]
+  }else{
+    country.mapping[i, ] <- all.groupings[1, ]
+  }
+}
+```
+
+<div class='well'>
+The end result of this mapping is that I could simply cbind the mapping with the raw data to create my answer data set. At the same time I also removed the now unneeded empty code rows and gave an id number column that would become necessary soon.
+</div>
+
+```{r}
+answer <- cbind(country.mapping, raw.data) %>%
+  subset(code != '') %>% 
+  rowid_to_column('id')
+kable(answer[1:10, 1:7])
+```
+
+<div class='well'>
+The data in this table really should be split into two. Once the data is made tidy, this would result in repeating the id, group, subgroup and country over a dozen times for each country. I seperated the first four columns out into their own data frame. 
+</div>
+
+```{r}
+country.id.table <- answer[, 1:4]
+kable(country.id.table %>% head())
+```
+
+<div class='well'>
+I completed tidying the data by removing the unneeded columns and then gathering all the columns representing different migrant rates. I split the column into two seperating the gener and age ranges. I then spread the genders back out. Finally, I changed all the migrant rates to numerics.
+</div>
+
+```{r}
+migration.data <- answer[, -c(2:5)] %>%  
+  gather(category, quantity, 2:33) %>%
+  separate(category, c('gender', 'age'), ' ') %>%
+  transform(age = ifelse(age == '5-9', '05-09', age)) %>%
+  spread(gender, quantity)%>%
+  arrange(id)
+
+migration.data[, 3:4] %<>% map(~str_replace_all(., '\\s', '') %>% as.numeric())
+kable(migration.data %>% head(10))
+```
+
+<div class='alert alert-info'>
+The data is now successfully tidy, spread across two data frames. The first contains a list of all major groupings, minor groupings and country. The other contains male and female migrant rates divided by age group.
+</div>
+
+<div class='page-header text-uppercase'>
+  <h3>Analysis</h3>
+</div>
+
+<div class='well'>
+I decided to examine which countries had the highest migrant rates. To do this, I needed the populations of each country in the year 2010. Thankfully, the first data set I tidied up for this project contained such information. I read in that tidy data along with the country locations information I used with that data set. I joined all four data frames together in order to create a frame that contained each countries migrant population as a proportion of their total population. The data was then ordered from highest to lowest and the top 10 were subset.
+</div>
+
+
+```{r, warning=FALSE, message=FALSE}
+populations <- read_csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\population_answer.csv') %>%
+  subset(year == 2010, select=-1) %>%
+  mutate(population = population %>% as.numeric() * 1000000) %>%
+  na.omit()
+
+country.locations <- read_csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\country_locations.csv')
+
+combined <- inner_join(country.id.table, populations, by='country') %>%
+  inner_join(migration.data, by='id') %>%
+  group_by(country) %>%
+  summarise(total = (sum(f) + sum(m)) / sum(population)) %>%
+  arrange(desc(total)) %>%
+  .[1:10, ] %>%
+  inner_join(country.locations, by=c('country'='name'))
+kable(combined[, c(1, 4:5, 2)])
+```
+
+<div class='well'>
+Finally, I plotted the data on a world map for viewing. 
+</div>
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(combined) +
+  borders('world', color='gray50', fill='gray50') + 
+  geom_point(aes(x=longitude, y=latitude, color=country), size=4) +
+  geom_label_repel(aes(x=longitude, y=latitude, label=country)) +
+  scale_color_brewer(palette='Set3')  +
+  labs(x='Longitude', 
+     y='Latitude',
+     color='Country',
+     title='Smaller Countries have Higher Migrant Rates'
+  )
+```
+
+<div class='alert alert-success'>
+The top 10 countries with the highest migrant rates are displayed on the above world map. The only link they appear to have is that they are generally from countries with small populations. It makes sense that smaller countries would have higher rates while having overall lower number of migrants. 
+</div>
