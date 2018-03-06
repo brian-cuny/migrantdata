@@ -38,7 +38,7 @@ For my last data set, I'm using UN data on migrant data rates per country in 201
 
 
 ```{r}
-example <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\UN_MigrantStockByAge_2015.csv', 
+example <- read.csv('https://raw.githubusercontent.com/brian-cuny/migrantdata/master/UN_MigrantStockByAge_2015.csv', 
                      stringsAsFactors=FALSE, header=FALSE, na.strings='..', encoding='utf-8')
 kable(example[15:27, 1:6])
 ```
@@ -48,7 +48,7 @@ I began by reading in the data and removing the unneeded rows and columns. I set
 </div>
 
 ```{r}
-raw.data <- read.csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\UN_MigrantStockByAge_2015.csv', 
+raw.data <- read.csv('https://raw.githubusercontent.com/brian-cuny/migrantdata/master/UN_MigrantStockByAge_2015.csv', 
                      stringsAsFactors=FALSE, header=FALSE, na.strings='..', encoding='utf-8') %>%
   .[-c(1:15, 17:22), -c(1, 3:4, 6:22, 39, 56)] %>%
   setNames(c('country', 'code', paste('m', .[1, 3:18]), paste('f', .[1, 19:34])) %>% unlist()) %>%
@@ -144,12 +144,12 @@ I decided to examine which countries had the highest migrant rates. To do this, 
 
 
 ```{r, warning=FALSE, message=FALSE}
-populations <- read_csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\population_answer.csv') %>%
+populations <- read_csv('https://raw.githubusercontent.com/brian-cuny/migrantdata/master/population_answer.csv') %>%
   subset(year == 2010, select=-1) %>%
   mutate(population = population %>% as.numeric() * 1000000) %>%
   na.omit()
 
-country.locations <- read_csv('C:\\Users\\Brian\\Desktop\\GradClasses\\Spring18\\migrantdata\\country_locations.csv')
+country.locations <- read_csv('https://raw.githubusercontent.com/brian-cuny/migrantdata/master/country_locations.csv')
 
 combined <- inner_join(country.id.table, populations, by='country') %>%
   inner_join(migration.data, by='id') %>%
